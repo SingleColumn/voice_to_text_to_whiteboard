@@ -1,12 +1,16 @@
 import { useRef, useState, type PointerEvent, type ChangeEvent } from 'react'
 import type { TLDefaultColorStyle } from 'tldraw'
-import type { RecorderState } from '../hooks/useVoiceRecorder'
 import { ComponentSelector, nearestTldrawColor, type Preset } from './ComponentSelector'
 import { MicButton } from './MicButton'
+import type { STTProvider } from '../hooks/useSpeechRecognition'
 
 interface DraggablePanelProps {
-  recorderState: RecorderState
-  errorMessage: string | null
+  isListening: boolean
+  isProcessing: boolean
+  interimTranscript: string
+  error: string | null
+  provider: STTProvider
+  onProviderChange: (p: STTProvider) => void
   onStart: () => void
   onStop: () => void
   onDismissError: () => void
@@ -20,7 +24,6 @@ interface JsonPreset {
   name?: unknown
   shape?: unknown
   bgColor?: unknown
-  textColor?: unknown
   color?: unknown
   size?: unknown
 }
@@ -33,26 +36,15 @@ const VALID_GEO_SHAPES = new Set([
   'triangle', 'x-box',
 ])
 
-const STATUS_VAR: Record<RecorderState, string> = {
-  idle:        'var(--tl-color-text-3)',
-  recording:   'var(--tl-color-danger)',
-  transcribing:'var(--tl-color-warning)',
-  error:       'var(--tl-color-danger)',
-}
-
-const STATUS_LABEL: Record<RecorderState, string> = {
-  idle: 'Ready',
-  recording: 'Recording…',
-  transcribing: 'Transcribing…',
-  error: 'Error',
-}
-
 const BASE_W = 260
-const BASE_H = null  // null = auto height
 
 export function DraggablePanel({
-  recorderState,
-  errorMessage,
+  isListening,
+  isProcessing,
+  interimTranscript,
+  error,
+  provider,
+  onProviderChange,
   onStart,
   onStop,
   onDismissError,
@@ -63,7 +55,7 @@ export function DraggablePanel({
 }: DraggablePanelProps) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const [panelW, setPanelW] = useState(BASE_W)
-  const [panelH, setPanelH] = useState<number | null>(BASE_H)
+  const [panelH, setPanelH] = useState<number | null>(null)
   const [isExpanded, setIsExpanded] = useState(true)
   const [importError, setImportError] = useState<string | null>(null)
 
@@ -167,6 +159,17 @@ export function DraggablePanel({
     ? { left: pos.x, top: pos.y, right: 'auto' as const }
     : { right: 16, top: 300 }
 
+  const statusColor = isListening
+    ? 'var(--tl-color-danger)'
+    : isProcessing
+      ? 'var(--tl-color-warning)'
+      : 'var(--tl-color-text-3)'
+  const statusLabel = isListening
+    ? 'Listening…'
+    : isProcessing
+      ? provider === 'whisper' ? 'Transcribing…' : 'Processing…'
+      : 'Ready'
+
   return (
     // tl-theme__dark ensures tldraw's CSS variables are available on this element.
     <div
@@ -227,16 +230,65 @@ export function DraggablePanel({
           {/* Section 1 — Voice */}
           <Section label="Voice" fs={fs.label}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+
+              {/* Provider toggle */}
+              <div style={{ display: 'flex', width: '100%', border: '1px solid var(--tl-color-divider)', borderRadius: 6, overflow: 'hidden' }}>
+                {(['deepgram', 'whisper'] as STTProvider[]).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => { if (!isListening && !isProcessing) onProviderChange(p) }}
+                    disabled={isListening || isProcessing}
+                    style={{
+                      flex: 1,
+                      padding: '5px 0',
+                      fontSize: fs.hint,
+                      fontFamily: "'Syne', sans-serif",
+                      fontWeight: provider === p ? 700 : 400,
+                      background: provider === p ? 'var(--tl-color-muted-1)' : 'transparent',
+                      color: provider === p ? 'var(--tl-color-text)' : 'var(--tl-color-text-3)',
+                      border: 'none',
+                      borderRight: p === 'deepgram' ? '1px solid var(--tl-color-divider)' : 'none',
+                      cursor: isListening || isProcessing ? 'default' : 'pointer',
+                      textTransform: 'capitalize',
+                      letterSpacing: '0.03em',
+                      transition: 'background 0.1s, color 0.1s',
+                    }}
+                  >
+                    {p === 'deepgram' ? 'Deepgram' : 'Whisper'}
+                  </button>
+                ))}
+              </div>
+
               <MicButton
-                state={recorderState}
+                isListening={isListening}
+                isProcessing={isProcessing}
                 onStart={onStart}
                 onStop={onStop}
-                onDismissError={onDismissError}
               />
-              <span style={{ fontSize: fs.status, color: STATUS_VAR[recorderState], fontWeight: 600, letterSpacing: '0.04em' }}>
-                {STATUS_LABEL[recorderState]}
+              <span style={{ fontSize: fs.status, color: statusColor, fontWeight: 600, letterSpacing: '0.04em' }}>
+                {statusLabel}
               </span>
-              {recorderState === 'error' && errorMessage && (
+
+              {/* Live transcript preview while listening or draining */}
+              {(isListening || isProcessing) && interimTranscript && (
+                <div style={{
+                  fontSize: fs.hint,
+                  color: 'var(--tl-color-text-2)',
+                  background: 'var(--tl-color-muted-1)',
+                  border: '1px solid var(--tl-color-divider)',
+                  borderRadius: 4,
+                  padding: '4px 8px',
+                  width: '100%',
+                  lineHeight: 1.4,
+                  textAlign: 'center',
+                  fontStyle: 'italic',
+                }}>
+                  {interimTranscript}
+                </div>
+              )}
+
+              {/* Error message */}
+              {error && (
                 <div
                   onClick={onDismissError}
                   style={{
@@ -252,7 +304,7 @@ export function DraggablePanel({
                     width: '100%',
                   }}
                 >
-                  {errorMessage}
+                  {error}
                 </div>
               )}
             </div>

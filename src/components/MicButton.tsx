@@ -1,61 +1,44 @@
-import type { RecorderState } from '../hooks/useVoiceRecorder'
-
 interface MicButtonProps {
-  state: RecorderState
+  isListening: boolean
+  isProcessing: boolean
   onStart: () => void
   onStop: () => void
-  onDismissError: () => void
 }
 
-const TOOLTIP: Record<RecorderState, string> = {
-  idle: 'Record a note',
-  recording: 'Stop recording',
-  transcribing: 'Transcribing…',
-  error: 'Transcription failed — click to retry',
-}
-
-// Background uses tldraw CSS variables (resolved by the parent .tl-theme__dark wrapper).
-const BG: Record<RecorderState, string> = {
-  idle:        'var(--tl-color-panel-contrast)',
-  recording:   'var(--tl-color-danger)',
-  transcribing:'var(--tl-color-panel-contrast)',
-  error:       'var(--tl-color-warning)',
-}
-
-export function MicButton({ state, onStart, onStop, onDismissError }: MicButtonProps) {
-  const isRecording = state === 'recording'
-  const isBusy = state === 'transcribing'
-
+export function MicButton({ isListening, isProcessing, onStart, onStop }: MicButtonProps) {
   function handleClick() {
-    if (isBusy) return
-    if (state === 'error') { onDismissError(); return }
-    isRecording ? onStop() : onStart()
+    if (isProcessing) return
+    isListening ? onStop() : onStart()
   }
+
+  const title = isProcessing ? 'Processing…' : isListening ? 'Stop recording' : 'Record a note'
 
   return (
     <button
       onClick={handleClick}
-      disabled={isBusy}
-      title={TOOLTIP[state]}
-      aria-label={TOOLTIP[state]}
+      disabled={isProcessing}
+      title={title}
+      aria-label={title}
       style={{
         width: 48,
         height: 48,
         borderRadius: '50%',
         border: '1px solid var(--tl-color-divider)',
-        background: BG[state],
+        background: isListening
+          ? 'var(--tl-color-danger)'
+          : 'var(--tl-color-panel-contrast)',
         color: 'var(--tl-color-text)',
-        cursor: isBusy ? 'default' : 'pointer',
+        cursor: isProcessing ? 'default' : 'pointer',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        opacity: isBusy ? 0.6 : 1,
+        opacity: isProcessing ? 0.6 : 1,
         transition: 'background 0.15s, opacity 0.15s',
         position: 'relative',
         flexShrink: 0,
       }}
     >
-      {isRecording && (
+      {isListening && (
         <span
           style={{
             position: 'absolute',
@@ -67,28 +50,30 @@ export function MicButton({ state, onStart, onStop, onDismissError }: MicButtonP
           }}
         />
       )}
-      <MicIcon state={state} />
+      {isProcessing ? <SpinnerIcon /> : isListening ? <StopIcon /> : <MicIcon />}
     </button>
   )
 }
 
-function MicIcon({ state }: { state: RecorderState }) {
-  if (state === 'transcribing') {
-    return (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-        <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="10">
-          <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.9s" repeatCount="indefinite" />
-        </circle>
-      </svg>
-    )
-  }
-  if (state === 'recording') {
-    return (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-        <rect x="6" y="6" width="12" height="12" rx="2" />
-      </svg>
-    )
-  }
+function SpinnerIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="10">
+        <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.9s" repeatCount="indefinite" />
+      </circle>
+    </svg>
+  )
+}
+
+function StopIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+    </svg>
+  )
+}
+
+function MicIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
       <rect x="9" y="2" width="6" height="11" rx="3" />

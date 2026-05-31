@@ -15,7 +15,8 @@ Non-technical — curious about voice-driven interfaces and new ways to think on
 | Framework | React + Vite | Required by tldraw |
 | Canvas | tldraw v5 | Infinite canvas, built-in geo shapes, programmatic element creation |
 | Voice capture | MediaRecorder API | Standard browser primitive; reliable, all browsers, decoupled from transcription |
-| Transcription | OpenAI Whisper API (`whisper-1`) | Accurate, simple HTTP call, works with any audio format MediaRecorder produces |
+| Transcription (default) | Deepgram streaming (`@deepgram/sdk@3`, `nova-3`) | Real-time interim results shown while speaking; event-driven drain after mic stops |
+| Transcription (alternate) | OpenAI Whisper API (`whisper-1`) | Batch fallback; simple HTTP call, works with any audio format MediaRecorder produces |
 | Styling | tldraw CSS variables (`var(--tl-color-*)`) | All UI chrome outside the canvas uses tldraw's design tokens via `.tl-theme__dark` |
 
 ---
@@ -30,11 +31,23 @@ Non-technical — curious about voice-driven interfaces and new ways to think on
 - No note is created if the transcript is empty
 
 ### 2. Transcription
-- Audio Blob is sent to the OpenAI Whisper API (`POST /v1/audio/transcriptions`)
-- API key is read from the `OPENAI_API_KEY` system environment variable; `vite.config.ts` exposes it to the browser bundle as `import.meta.env.VITE_OPENAI_API_KEY`
-- While waiting for the response the mic button enters a "transcribing" state (amber, spinner icon, disabled)
-- On success the transcript is committed as a note
-- On failure an error message is shown in the control panel; clicking it dismisses and resets to idle
+
+The user selects a provider via a segmented toggle in the control panel (disabled while a session is active).
+
+**Deepgram (default)**
+- Opens a WebSocket to Deepgram's streaming API once the mic starts
+- Audio chunks (250ms) are sent continuously; interim results update the live preview in the panel
+- When mic stops, `requestClose()` signals end-of-speech; the connection flushes remaining audio and fires `Close` — the transcript is committed at that point (event-driven drain)
+- A 3-second fallback timer commits the best transcript seen so far if `Close` never arrives
+- API key read from `DEEPGRAM_API_KEY` system environment variable; exposed to the browser bundle as `import.meta.env.VITE_DEEPGRAM_API_KEY` by `vite.config.ts`
+
+**Whisper**
+- MediaRecorder collects the full audio Blob while the mic is open
+- On mic stop, the Blob is POSTed to the OpenAI Whisper API (`POST /v1/audio/transcriptions`)
+- While waiting, the button enters a "processing" state (spinner, disabled)
+- API key read from `OPENAI_API_KEY` system environment variable; exposed as `import.meta.env.VITE_OPENAI_API_KEY` by `vite.config.ts`
+
+Both providers: on success the transcript is committed as a note; on failure an error message is shown in the control panel and clicking it dismisses and resets to idle. No note is created for an empty transcript.
 
 ### 3. Note Creation
 - Each transcript creates a new note on the canvas using the session's selected style preset
@@ -61,9 +74,11 @@ Non-technical — curious about voice-driven interfaces and new ways to think on
 | State | Colour | Icon | Behaviour |
 |---|---|---|---|
 | Idle | Green | Microphone | Click to start recording |
-| Recording | Red | Stop square + pulse ring | Click to stop and transcribe |
-| Transcribing | Amber | Spinner | Disabled; waiting for Whisper response |
+| Listening | Red | Stop square + pulse ring | Click to stop and process |
+| Processing | Amber | Spinner | Disabled; waiting for transcript (Deepgram drain or Whisper HTTP) |
 | Error | Orange | Microphone | Shows error message; click message to dismiss |
+
+The status label next to the button reads: **Listening…** while the mic is open, **Processing…** (Deepgram) or **Transcribing…** (Whisper) while waiting for the result, and **Ready** at idle.
 
 ---
 
@@ -127,10 +142,10 @@ src/
   canvas/
     VoiceCanvas.tsx           # tldraw instance + addNoteToCanvas helper
   hooks/
-    useVoiceRecorder.ts       # MediaRecorder capture + Whisper transcription
+    useSpeechRecognition.ts   # Dual-provider STT hook (Deepgram streaming + Whisper batch)
   components/
-    DraggablePanel.tsx        # Draggable/resizable control panel + JSON preset import
-    MicButton.tsx             # State-aware mic button (idle/recording/transcribing/error)
+    DraggablePanel.tsx        # Draggable/resizable control panel + provider toggle + JSON preset import
+    MicButton.tsx             # State-aware mic button (idle / listening / processing)
     ComponentSelector.tsx     # Style preset picker + nearestTldrawColor + NOTE_COLORS
 ```
 
@@ -138,8 +153,9 @@ src/
 
 ## Key Implementation Notes
 
-- `MediaRecorder` + Whisper decouples capture from transcription — each can fail and be handled independently
-- Audio format is chosen at runtime via `MediaRecorder.isTypeSupported()` (prefers `audio/webm`, falls back to `audio/mp4`, then `audio/ogg`)
+- Dual-provider design: `useSpeechRecognition({ provider, onTranscript })` returns a uniform interface — `App` does not need to know which provider is active
+- Deepgram: `finalTextRef` accumulates only `is_final` segments; `bestTextRef` (final + current interim) is the commit target — avoids duplicating words that appear in both interim and final results
+- Whisper: audio format chosen at runtime via `MediaRecorder.isTypeSupported()` (prefers `audio/webm`, falls back to `audio/mp4`, then `audio/ogg`)
 - `editor.createShape(...)` for programmatic note creation using the built-in `geo` shape type
 - `toRichText(text)` (imported from `'tldraw'`) is required for the `richText` prop — plain strings are not accepted by geo shapes
 - `editor.centerOnPoint(...)` to move the camera to each new note (instant, no animation)
@@ -149,9 +165,19 @@ src/
 
 ## Setup
 
-```
-export OPENAI_API_KEY=your-key-here
+```bash
+# Set API keys in your shell environment (add to ~/.zshrc or ~/.bashrc to persist)
+export DEEPGRAM_API_KEY=your-deepgram-key-here   # required for Deepgram (default provider)
+export OPENAI_API_KEY=your-openai-key-here        # required for Whisper
+
 npm install
+npm run dev
+```
+
+On Windows (PowerShell):
+```powershell
+$env:DEEPGRAM_API_KEY = "your-deepgram-key-here"
+$env:OPENAI_API_KEY   = "your-openai-key-here"
 npm run dev
 ```
 
@@ -162,7 +188,6 @@ npm run dev
 - Controlling note shape, size, font, or colour via voice
 - Backend or database persistence
 - Multi-user / collaboration
-- Streaming transcription (Deepgram, AssemblyAI)
 - Export (PDF, image)
 - Note tagging or categorisation
 - Per-note style variation within a session
@@ -171,7 +196,9 @@ npm run dev
 
 ## Done When
 - User can dictate multiple notes onto a shared whiteboard canvas
-- Each note displays the transcribed text from Whisper
+- Each note displays the transcribed text (Deepgram or Whisper)
+- Interim transcript is shown in real time while speaking (Deepgram)
+- User can switch between Deepgram and Whisper via a toggle in the control panel
 - Notes are auto-laid-out without overlapping
 - User can choose a style preset before or during the session
 - Board state persists across page reloads
@@ -181,8 +208,8 @@ npm run dev
 
 ## Upgrade Path (v2+)
 
-- Streaming STT (Deepgram) for real-time transcript preview while speaking
 - Supabase for cross-device board persistence
 - tldraw multiplayer sync for collaboration
 - Expanded preset library (speech bubbles, index cards, hexagons)
 - Per-note colour selection within a session
+- Voice commands to edit note properties (shape, colour, size)
