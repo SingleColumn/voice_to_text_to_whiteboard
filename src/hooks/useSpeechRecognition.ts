@@ -1,7 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk'
-
-export type STTProvider = 'deepgram' | 'whisper'
+import { STT_PROVIDERS, type STTProvider } from '../config/sttProviders'
 
 type DeepgramConnection = ReturnType<ReturnType<typeof createClient>['listen']['live']>
 
@@ -21,12 +20,13 @@ async function transcribeWithWhisper(blob: Blob, mimeType: string): Promise<stri
   const apiKey = import.meta.env.VITE_OPENAI_API_KEY
   if (!apiKey) throw new Error('OPENAI_API_KEY is not set in the environment')
 
+  const whisperConfig = STT_PROVIDERS.whisper
   const ext = mimeType.split('/')[1]?.split(';')[0] ?? 'webm'
   const formData = new FormData()
   formData.append('file', blob, `recording.${ext}`)
-  formData.append('model', 'whisper-1')
+  formData.append('model', whisperConfig.model)
 
-  const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+  const res = await fetch(whisperConfig.endpoint, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}` },
     body: formData,
@@ -149,13 +149,11 @@ export function useSpeechRecognition({ provider, onTranscript }: UseSpeechRecogn
     finalTextRef.current = ''
     bestTextRef.current  = ''
 
+    const deepgramConfig = STT_PROVIDERS.deepgram
     const deepgram   = createClient(apiKey)
     const connection = deepgram.listen.live({
-      model: 'nova-3',
-      language: 'en',
-      smart_format: true,
-      interim_results: true,
-      utterance_end_ms: 1000,
+      model: deepgramConfig.model,
+      ...deepgramConfig.params,
     })
     connectionRef.current = connection
 

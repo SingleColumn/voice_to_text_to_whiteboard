@@ -3,14 +3,15 @@ import type { Editor } from 'tldraw'
 import { DraggablePanel } from './components/DraggablePanel'
 import { DEFAULT_PRESETS, type Preset } from './components/ComponentSelector'
 import { addNoteToCanvas, VoiceCanvas } from './canvas/VoiceCanvas'
-import { useSpeechRecognition, type STTProvider } from './hooks/useSpeechRecognition'
+import { DEFAULT_STT_PROVIDER, type STTProvider } from './config/sttProviders'
+import { useSpeechRecognition } from './hooks/useSpeechRecognition'
 
 export default function App() {
   const editorRef    = useRef<Editor | null>(null)
   const noteCountRef = useRef(0)
   const [presets, setPresets]               = useState<Preset[]>(DEFAULT_PRESETS)
   const [selectedPresetId, setSelectedPresetId] = useState(DEFAULT_PRESETS[0].id)
-  const [provider, setProvider]             = useState<STTProvider>('deepgram')
+  const [provider, setProvider]             = useState<STTProvider>(DEFAULT_STT_PROVIDER)
 
   const selectedPreset = presets.find((p) => p.id === selectedPresetId) ?? presets[0]
 

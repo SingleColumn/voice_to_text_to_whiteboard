@@ -2,7 +2,7 @@ import { useRef, useState, type PointerEvent, type ChangeEvent } from 'react'
 import type { TLDefaultColorStyle } from 'tldraw'
 import { ComponentSelector, nearestTldrawColor, type Preset } from './ComponentSelector'
 import { MicButton } from './MicButton'
-import type { STTProvider } from '../hooks/useSpeechRecognition'
+import type { STTProvider } from '../config/sttProviders'
 
 interface DraggablePanelProps {
   isListening: boolean
@@ -163,7 +163,7 @@ export function DraggablePanel({
     ? 'var(--tl-color-danger)'
     : isProcessing
       ? 'var(--tl-color-warning)'
-      : 'var(--tl-color-text-3)'
+      : '#555'
   const statusLabel = isListening
     ? 'Listening…'
     : isProcessing
@@ -171,10 +171,11 @@ export function DraggablePanel({
       : 'Ready'
 
   return (
-    // tl-theme__dark ensures tldraw's CSS variables are available on this element.
+    // tl-theme__light resolves tldraw CSS variables to the light palette
+    // (white panel background, dark text). The border is pinned to solid black.
     <div
       ref={panelRef}
-      className="tl-theme__dark"
+      className="tl-theme__light"
       style={{
         position: 'absolute',
         ...posStyle,
@@ -182,7 +183,7 @@ export function DraggablePanel({
         width: panelW,
         height: panelH ?? undefined,
         background: 'var(--tl-color-panel)',
-        border: '1px solid var(--tl-color-panel-contrast)',
+        border: '2px solid #000',
         borderRadius: 10,
         fontFamily: "'Syne', sans-serif",
         fontSize: fs.body,
