@@ -1,13 +1,14 @@
 # Voice Whiteboard
 
-A browser demo that turns spoken words into sticky notes on an infinite canvas. Speak a thought, get a note — no typing, no clicking to place it. The goal is to test whether voice input makes whiteboarding feel less effortful.
+A browser demo that turns spoken words into sticky notes on an infinite canvas. 
+The goal is to test whether voice input makes whiteboarding feel less effortful.
 
 ---
 
 ## Prerequisites
 
 - Node.js 18+
-- A Deepgram API key (used for the default streaming transcription) — [get one free at deepgram.com](https://deepgram.com)
+- A Deepgram API key (used for the default streaming transcription)
 - An OpenAI API key (used for the Whisper batch transcription option)
 - Chrome or Edge (required for MediaRecorder)
 
@@ -39,9 +40,9 @@ Then open http://localhost:5173 in your browser.
 
 1. Choose a note style (Card or Bubble) from the control panel on the right
 2. Optionally switch the transcription provider using the **Deepgram / Whisper** toggle at the top of the panel
-3. Click the mic button to start recording
-4. Speak your thought — with Deepgram you'll see a live transcript preview as you speak
-5. Click the mic button again to stop — the note appears once transcription finishes
+3. Click the mic button to activate the microphone
+4. Start speaking — with Deepgram you'll see a live transcript preview as you speak
+5. Click the mic button again to deactivate the microphone — the note appears on the whiteboard once transcription finishes
 6. Repeat to add more notes; the canvas organises them automatically
 7. Pan and zoom freely; your board is saved automatically and restored on reload
 
